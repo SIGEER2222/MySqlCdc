@@ -25,7 +25,9 @@ This version includes following changes:
 
   <ItemGroup>
     <PackageReference Include="System.IO.Pipelines" Version="8.0.0" />
-    <PackageReference Include="System.Text.Json" Version="8.0.0" />
+    <PackageReference Include="System.Reactive" Version="6.0.1" />
+    <PackageReference Include="System.Reactive.Linq" Version="6.0.1" />
+    <PackageReference Include="System.Text.Json" Version="*" />
   </ItemGroup>
 
   <ItemGroup>

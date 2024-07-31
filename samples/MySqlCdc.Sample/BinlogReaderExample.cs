@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using MySqlCdc.Events;
 using MySqlCdc.Providers.MariaDb;
 using MySqlCdc.Providers.MySql;
@@ -10,7 +11,7 @@ class BinlogReaderExample
 {
     internal static async Task Start(bool mariadb)
     {
-        using (Stream stream = File.OpenRead("mysql-bin.000001"))
+        using (Stream stream = File.OpenRead(@"D:\桌面\MySqlCdc\samples\MySqlCdc.Sample\mysql-bin.000001"))
         {
             EventDeserializer deserializer = mariadb
                 ? new MariaDbEventDeserializer()
@@ -20,7 +21,29 @@ class BinlogReaderExample
 
             await foreach (var (header, binlogEvent) in reader.ReadEvents())
             {
-                await PrintEventAsync(binlogEvent);
+                if (binlogEvent is TableMapEvent tableMap)
+                {
+                    Debug.WriteLine(new string('-', 100));
+                    System.Console.WriteLine();
+                    await PrintEventAsync(binlogEvent);
+                }
+                else if (binlogEvent is WriteRowsEvent writeRows)
+                {
+                    Debug.WriteLine(new string('-', 100));
+                    System.Console.WriteLine();
+                    await PrintEventAsync(binlogEvent);
+                }
+                else if (binlogEvent is UpdateRowsEvent updateRows)
+                {
+                    Debug.WriteLine(new string('-', 100));
+                    System.Console.WriteLine(); await PrintEventAsync(binlogEvent);
+                }
+                else if (binlogEvent is DeleteRowsEvent deleteRows)
+                {
+                    Debug.WriteLine(new string('-', 100));
+                    System.Console.WriteLine(); await PrintEventAsync(binlogEvent);
+                }
+                else await PrintEventAsync(binlogEvent);
             }
         }
     }

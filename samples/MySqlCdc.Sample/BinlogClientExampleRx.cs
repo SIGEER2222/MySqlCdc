@@ -2,14 +2,17 @@ using MySqlCdc.Constants;
 using MySqlCdc.Events;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using System.Collections.Concurrent;
+using System.Reactive.Linq;
 
 namespace MySqlCdc.Sample;
-
-class BinlogClientExample
+public class BinlogClientExampleRx
 {
-    internal static async Task Start()
+    private static readonly ConcurrentDictionary<long, string> TableMap = new ConcurrentDictionary<long, string>();
+
+    public static void Start()
     {
-        var client = new BinlogClient(options =>
+        var client = new BinlogClientRx(options =>
         {
             options.Port = 3306;
             options.Username = "root";
@@ -17,36 +20,27 @@ class BinlogClientExample
             options.SslMode = SslMode.Disabled;
             options.HeartbeatInterval = TimeSpan.FromSeconds(30);
             options.Blocking = true;
-
-            // // Start replication from MariaDB GTID
-            // options.Binlog = BinlogOptions.FromGtid(GtidList.Parse("0-1-270"));
-
-            // // Start replication from MySQL GTID
-            // var gtidSet = "d4c17f0c-4f11-11ea-93e3-325d3e1cd1c8:1-107, f442510a-2881-11ea-b1dd-27916133dbb2:1-7";
-            // options.Binlog = BinlogOptions.FromGtid(GtidSet.Parse(gtidSet));
-
-            // // Start replication from the position
-            options.Binlog = BinlogOptions.FromPosition("MySQL.000006", 195);
-
-            // Start replication from last master position.
-            // Useful when you are only interested in new changes.
             options.Binlog = BinlogOptions.FromEnd();
-
-            // // Start replication from first event of first available master binlog.
-            // // Note that binlog files by default have expiration time and deleted.
-            // options.Binlog = BinlogOptions.FromStart();
+            // options.Binlog = BinlogOptions.FromPosition("MySQL.000006", 1);
         });
 
-        await foreach (var (header, binlogEvent) in client.Replicate())
+        var cancellationTokenSource = new CancellationTokenSource();
+        var observable = client.Replicate(cancellationTokenSource.Token);
+
+        observable.Subscribe(
+        async x =>
         {
+            var (header, binlogEvent) = x;
+            Console.WriteLine(header.EventType);
             var state = client.State;
-            System.Console.WriteLine(binlogEvent.GetType());
 
             if (binlogEvent is TableMapEvent tableMap)
             {
-                System.Console.WriteLine($"{tableMap.TableId} {tableMap.DatabaseName}.{tableMap.TableName}");
+                Console.WriteLine($"{tableMap.TableId} {tableMap.DatabaseName}.{tableMap.TableName}");
+                TableMap[tableMap.TableId] = $"{tableMap.DatabaseName}.{tableMap.TableName}";
                 await HandleTableMapEvent(tableMap);
             }
+
             else if (binlogEvent is WriteRowsEvent writeRows)
             {
                 await HandleWriteRowsEvent(writeRows);
@@ -61,29 +55,31 @@ class BinlogClientExample
             }
             else if (binlogEvent is FormatDescriptionEvent formatDescriptionEvent)
             {
-                System.Console.WriteLine(formatDescriptionEvent);
+                Console.WriteLine(formatDescriptionEvent);
             }
-            else if (binlogEvent is MySqlCdc.Events.QueryEvent rotateEvent)
+            else if (binlogEvent is QueryEvent rotateEvent)
             {
-                System.Console.WriteLine(rotateEvent);
+                Console.WriteLine(rotateEvent);
             }
             else
             {
-                System.Console.WriteLine("Unhandled event");
+                Console.WriteLine("Unhandled event");
                 await PrintEventAsync(binlogEvent);
             }
-            System.Console.WriteLine(new string('-', 100));
-            _ = 1;
-        }
+            Console.WriteLine(new string('-', 100));
+        },
+        ex => Console.Error.WriteLine($"Error: {ex.Message}"),
+        () => Console.WriteLine("Replication completed.")
+        );
     }
 
     private static async Task PrintEventAsync(IBinlogEvent binlogEvent)
     {
         var json = JsonConvert.SerializeObject(binlogEvent, Formatting.Indented,
-            new JsonSerializerSettings()
-            {
-                Converters = new List<JsonConverter> { new StringEnumConverter() }
-            });
+        new JsonSerializerSettings()
+        {
+            Converters = new List<JsonConverter> { new StringEnumConverter() }
+        });
         await Console.Out.WriteLineAsync(json);
     }
 
@@ -95,20 +91,28 @@ class BinlogClientExample
 
     private static async Task HandleWriteRowsEvent(WriteRowsEvent writeRows)
     {
+        if (TableMap.TryGetValue(writeRows.TableId, out var tableName))
+        {
+            Console.WriteLine($"Table: {tableName}");
+        }
         Console.WriteLine($"{writeRows.Rows.Count} rows were written");
         await PrintEventAsync(writeRows);
 
         foreach (var row in writeRows.Rows)
         {
             var cells = row.Cells.Where(cell => cell is object).Select(cell => cell?.ToString());
-            System.Console.WriteLine(cells.Aggregate((a, b) => $"{a}, {b}"));
+            Console.WriteLine(cells.Aggregate((a, b) => $"{a}, {b}"));
         }
     }
 
-    private static async Task HandleUpdateRowsEvent(UpdateRowsEvent updatedRows)
+    private static Task HandleUpdateRowsEvent(UpdateRowsEvent updatedRows)
     {
+        if (TableMap.TryGetValue(updatedRows.TableId, out var tableName))
+        {
+            Console.WriteLine($"Table: {tableName}");
+        }
         Console.WriteLine($"{updatedRows.Rows.Count} rows were updated");
-        await PrintEventAsync(updatedRows);
+        // await PrintEventAsync(updatedRows);
 
         foreach (var row in updatedRows.Rows)
         {
@@ -134,17 +138,22 @@ class BinlogClientExample
                 Console.WriteLine($"{kvp.Key}: Old Value = {kvp.Value.OldValue}, New Value = {kvp.Value.NewValue}");
             }
         }
+        return Task.CompletedTask;
     }
 
     private static async Task HandleDeleteRowsEvent(DeleteRowsEvent deleteRows)
     {
+        if (TableMap.TryGetValue(deleteRows.TableId, out var tableName))
+        {
+            Console.WriteLine($"Table: {tableName}");
+        }
         Console.WriteLine($"{deleteRows.Rows.Count} rows were deleted");
         await PrintEventAsync(deleteRows);
         foreach (var row in deleteRows.Rows)
         {
             var cells = row.Cells.Where(cell => cell is object).Select(cell => cell?.ToString());
-            System.Console.WriteLine(cells.Aggregate((a, b) => $"{a}, {b}"));
+            Console.WriteLine(cells.Aggregate((a, b) => $"{a}, {b}"));
         }
-        System.Console.WriteLine(new string('-', 100));
+        Console.WriteLine(new string('-', 100));
     }
 }
