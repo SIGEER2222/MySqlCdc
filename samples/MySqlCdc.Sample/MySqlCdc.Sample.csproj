@@ -18,4 +18,11 @@
     <PackageReference Include="System.Reactive.Linq" Version="6.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="*" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="*" />
+    <PackageReference Include="Serilog.Sinks.File" Version="*" />
+    <PackageReference Include="Serilog.Sinks.Debug" Version="*" />
+  </ItemGroup>
+
 </Project>

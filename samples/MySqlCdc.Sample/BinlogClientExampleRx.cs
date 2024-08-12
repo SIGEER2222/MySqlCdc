@@ -1,15 +1,23 @@
 using MySqlCdc.Constants;
 using MySqlCdc.Events;
+using MySqlCdc.Providers.MySql;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Serilog;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reactive.Linq;
 
 namespace MySqlCdc.Sample;
 public class BinlogClientExampleRx
 {
     private static readonly ConcurrentDictionary<long, string> TableMap = new ConcurrentDictionary<long, string>();
-
+    static ILogger log = Log.Logger = new LoggerConfiguration()
+        .MinimumLevel.Debug()
+        .WriteTo.Console()
+        .WriteTo.Debug()
+        .WriteTo.File("logs/MySqlCdcSample.log", rollingInterval: RollingInterval.Day)
+        .CreateLogger();
     public static void Start()
     {
         var client = new BinlogClientRx(options =>
@@ -17,6 +25,11 @@ public class BinlogClientExampleRx
             options.Port = 3306;
             options.Username = "root";
             options.Password = "ZZQ159357";
+
+            // options.Port = 31001;
+            // options.Username = "mom";
+            // options.Password = "mom";
+            // options.Hostname = "10.10.10.106";
             options.SslMode = SslMode.Disabled;
             options.HeartbeatInterval = TimeSpan.FromSeconds(30);
             options.Blocking = true;
@@ -61,6 +74,12 @@ public class BinlogClientExampleRx
             {
                 Console.WriteLine(rotateEvent);
             }
+            else if (binlogEvent is RowsQueryEvent rowsQueryEvent)
+            {
+                var query = rowsQueryEvent.Query;
+                if (query.Contains("MOM_BUSINESSRULE")) return;
+                log.Information(rowsQueryEvent.Query);
+            }
             else
             {
                 Console.WriteLine("Unhandled event");
@@ -68,7 +87,14 @@ public class BinlogClientExampleRx
             }
             Console.WriteLine(new string('-', 100));
         },
-        ex => Console.Error.WriteLine($"Error: {ex.Message}"),
+        ex =>
+        {
+            if (Debugger.IsAttached)
+            {
+                Debugger.Break();
+            }
+            Console.Error.WriteLine($"Error: {ex.Message}");
+        },
         () => Console.WriteLine("Replication completed.")
         );
     }
