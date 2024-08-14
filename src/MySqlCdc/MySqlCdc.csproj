@@ -10,7 +10,7 @@
     <Authors>Ruslan Ulianets</Authors>
     <PackageTags>MySQL</PackageTags>
     <Description>MySQL/MariaDB binlog change data capture (CDC) connector for .NET</Description>
-    <PackageProjectUrl>https://github.com/rusuly/MySqlCdc</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/SIGEER2222/MySqlCdc</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReleaseNotes>
 This version includes following changes:
